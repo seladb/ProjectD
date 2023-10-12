@@ -23,6 +23,20 @@ files = [
 ]
 
 [[package]]
+name = "cxxheaderparser"
+version = "1.1.0"
+description = "Parse C++ header files and generate a data structure representing the class"
+optional = false
+python-versions = ">= 3.6"
+files = [
+    {file = "cxxheaderparser-1.1.0-py3-none-any.whl", hash = "sha256:31f20fa99365fd3a515576057a38c09b55ebc3d46a6a451d22b7078daab6cdc4"},
+    {file = "cxxheaderparser-1.1.0.tar.gz", hash = "sha256:42bb76d1047e0cda2eadde0278ae8537620f960b511294cdf2afee2d6f273dcb"},
+]
+
+[package.extras]
+pcpp = ["pcpp (>=1.30,<2.0)"]
+
+[[package]]
 name = "distlib"
 version = "0.3.7"
 description = "Distribution utilities"
@@ -404,4 +418,4 @@ test = ["covdefaults (>=2.3)", "coverage (>=7.2.7)", "coverage-enable-subprocess
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<4.0"
-content-hash = "0e007178a2ad5c6fd7e83e9658635cccaa306b6506e1d0b104b2a52ef7467b16"
+content-hash = "916911b39e9655ca5d7283459da3f0f3d1f2cfa2b914ccd0c32f17bfde4aa00a"

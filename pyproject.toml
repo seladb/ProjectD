@@ -12,6 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
+cxxheaderparser = "^1.1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.2"
