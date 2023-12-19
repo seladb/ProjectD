@@ -11,7 +11,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<4.0"
+python = ">=3.12,<4.0"
 cxxheaderparser = "^1.1.0"
 pcpp = "^1.30"
 jinja2 = "^3.1.2"
@@ -31,7 +31,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 120
-target-version = ['py37']
+target-version = ['py312']
 preview = true
 
 [tool.mypy]
