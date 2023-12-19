@@ -22,6 +22,7 @@ def remove_comment_chars_from_line(line: str) -> str:
 
 
 def preprocess_lines(lines: list[str]) -> list[str]:
+    # ruff: noqa: C901
     result: list[str] = []
     cur_line = None
     block_type = None
@@ -34,10 +35,12 @@ def preprocess_lines(lines: list[str]) -> list[str]:
         if block_type == "verbatim":
             if "\\endverbatim" in line or "@endverbatim" in line:
                 block_type = None
-                line_without_end_verbatim = line.replace("\\endverbatim", "").replace("@endverbatim", "")[
+                if line_without_end_verbatim := line.replace("\\endverbatim", "").replace("@endverbatim", "")[
                     chars_from_original_line:
-                ]
-                result.append("\n".join([cur_line, line_without_end_verbatim]))
+                ]:
+                    cur_line = "\n".join([cur_line, line_without_end_verbatim])
+
+                result.append(cur_line)
                 cur_line = None
             else:
                 verbatim_line = line[chars_from_original_line:]
@@ -74,7 +77,7 @@ def preprocess_lines(lines: list[str]) -> list[str]:
                 result.append(cur_line)
                 cur_line = None
             else:
-                cur_line = " ".join([cur_line, stripped_line]) if cur_line else stripped_line
+                cur_line = " ".join([cur_line, fully_stripped_line]) if cur_line else fully_stripped_line
                 continue
 
         if not fully_stripped_line:
@@ -93,7 +96,6 @@ def preprocess_lines(lines: list[str]) -> list[str]:
         elif fully_stripped_line.startswith(("-", "+", "*")):
             block_type = "list"
             cur_line = f"@li {stripped_line}"
-        # elif fully_stripped_line.startswith(("\\", "@")):
         else:
             block_type = "other"
             cur_line = fully_stripped_line
@@ -106,7 +108,7 @@ def preprocess_lines(lines: list[str]) -> list[str]:
 
 def get_keyword_and_rest_of_line(line: str) -> tuple[str, str]:
     if line.startswith(("\\", "@")):
-        keyword_and_rest_of_line = re.split(" |\n", line, 1)
+        keyword_and_rest_of_line = re.split(" |\n", line, maxsplit=1)
         rest_of_line = keyword_and_rest_of_line[1] if len(keyword_and_rest_of_line) > 1 else ""
         return keyword_and_rest_of_line[0][1:], rest_of_line
 
