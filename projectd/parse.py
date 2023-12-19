@@ -1,6 +1,6 @@
 import os
 import re
-import typing
+from typing import Callable
 from copy import deepcopy
 from dataclasses import dataclass
 
@@ -29,7 +29,7 @@ def get_base_classes(ns: NamespaceDoc, class_doc: ClassDoc) -> list[str]:
     return result
 
 
-def parse(directory_paths: list[str], defines: typing.Optional[list[str]] = None) -> ParsedDocData:
+def parse(directory_paths: list[str], defines: list[str] | None = None) -> ParsedDocData:
     if defines is None:
         defines = []
     preprocessor = make_pcpp_preprocessor(passthru_includes=re.compile(".+"), defines=defines)
@@ -102,8 +102,8 @@ def parse(directory_paths: list[str], defines: typing.Optional[list[str]] = None
 def _update_desc(
     desc: list[TextBlock],
     parsed_data: ParsedDocData,
-    code_template: typing.Callable[[str], str],
-    class_link: typing.Callable[[str], str],
+    code_template: Callable[[str], str],
+    class_link: Callable[[str], str],
 ) -> list[str]:
     result = []
     for line in desc:
@@ -118,8 +118,8 @@ def _update_desc(
 
 def post_process(
     parsed_data: ParsedDocData,
-    code_template: typing.Callable[[str], str],
-    class_link: typing.Callable[[str, str, typing.Optional[str]], str],
+    code_template: Callable[[str], str],
+    class_link: Callable[[str, str, str | None], str],
 ) -> ParsedDocData:
     post_processed_parsed_data = deepcopy(parsed_data)
     for ns in post_processed_parsed_data.namespaces.values():

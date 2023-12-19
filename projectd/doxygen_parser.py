@@ -1,9 +1,9 @@
 import os
 import re
-import typing
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
+from typing import Any, Callable
 
 from cxxheaderparser.simple import ClassScope, NamespaceScope
 from cxxheaderparser.types import AnonymousName, EnumDecl, Enumerator, Field, Method, Parameter
@@ -128,7 +128,7 @@ class VerbatimBlock(TextBlock):
     pass
 
 
-DocBlock = typing.Union[list[TextBlock], list[str]]
+DocBlock = list[TextBlock] | list[str]
 
 
 @dataclass
@@ -188,13 +188,13 @@ class Param:
 
 @dataclass
 class EntityDoc:
-    desc: typing.Optional[DocBlock]
-    brief: typing.Optional[DocBlock]
-    deprecated: typing.Optional[DocBlock]
-    todo: typing.Optional[DocBlock]
+    desc: DocBlock | None
+    brief: DocBlock | None
+    deprecated: DocBlock | None
+    todo: DocBlock | None
 
     @classmethod
-    def _from_comment(cls, doxygen: typing.Optional[str]) -> tuple[dict[str, typing.Any], list[CommandDoc]]:
+    def _from_comment(cls, doxygen: str | None) -> tuple[dict[str, Any], list[CommandDoc]]:
         commands_and_data: list[CommandDoc] = []
         if doxygen:
             commands_and_data = process_lines(doxygen.splitlines())
@@ -219,7 +219,7 @@ class EntityDoc:
         text_block: str,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
-        class_link: typing.Callable[[str, str, typing.Optional[str]], str],
+        class_link: Callable[[str, str, str | None], str],
     ) -> str:
         text_block_str = str(text_block)
         index_of_first_non_whitespace = len(text_block_str) - len(text_block_str.lstrip())
@@ -276,8 +276,8 @@ class EntityDoc:
         block: DocBlock,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
-        code_template: typing.Callable[[str], str],
-        class_link: typing.Callable[[str, str, typing.Optional[str]], str],
+        code_template: Callable[[str], str],
+        class_link: Callable[[str, str, str | None], str],
     ) -> list[str]:
         result = []
         for line in block:
@@ -292,8 +292,8 @@ class EntityDoc:
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
-        code_template: typing.Callable[[str], str],
-        class_link: typing.Callable[[str, str, typing.Optional[str]], str],
+        code_template: Callable[[str], str],
+        class_link: Callable[[str, str, str | None], str],
     ):
         if self.brief:
             self.brief = self._update_doc_block(self.brief, namespace_docs, cur_namespace, code_template, class_link)
@@ -325,11 +325,11 @@ class MethodDoc(NamedEntityDoc):
     virtual: bool
     final: bool
     override: bool
-    returns: typing.Optional[DocBlock] = None
-    return_type: typing.Optional[str] = None
+    returns: DocBlock | None = None
+    return_type: str | None = None
 
     @classmethod
-    def parse_param(cls, param_doc: CommandDoc, params: list[Parameter]) -> typing.Optional[Param]:
+    def parse_param(cls, param_doc: CommandDoc, params: list[Parameter]) -> Param | None:
         param_pattern = r"^param(?:\[(in|out|inout)\])?$"
 
         if not param_doc.doc:
@@ -358,7 +358,7 @@ class MethodDoc(NamedEntityDoc):
         return None
 
     @classmethod
-    def parse(cls, method: Method) -> typing.Optional["MethodDoc"]:
+    def parse(cls, method: Method) -> "MethodDoc | None":
         kwargs, commands_and_data = super()._from_comment(method.doxygen)
         kwargs["name"] = method.name.format()
         params = []
@@ -397,8 +397,8 @@ class MethodDoc(NamedEntityDoc):
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
-        code_template: typing.Callable[[str], str],
-        class_link: typing.Callable[[str, str, typing.Optional[str]], str],
+        code_template: Callable[[str], str],
+        class_link: Callable[[str, str, str | None], str],
     ):
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
@@ -424,7 +424,7 @@ class AttributeDoc(NamedEntityDoc):
 
 @dataclass
 class EnumeratorDoc(NamedEntityDoc):
-    value: typing.Optional[str]
+    value: str | None
 
     @classmethod
     def parse(cls, enumerator: Enumerator) -> "EnumeratorDoc":
@@ -439,7 +439,7 @@ class EnumDoc(NamedEntityDoc):
     values: list[EnumeratorDoc]
 
     @classmethod
-    def parse(cls, enum_decl: EnumDecl) -> typing.Optional["EnumDoc"]:
+    def parse(cls, enum_decl: EnumDecl) -> "EnumDoc | None":
         kwargs, commands_and_data = super()._from_comment(enum_decl.doxygen)
 
         enum_name = enum_decl.typename.segments[-1].format()
@@ -459,8 +459,8 @@ class EnumDoc(NamedEntityDoc):
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
-        code_template: typing.Callable[[str], str],
-        class_link: typing.Callable[[str, str, typing.Optional[str]], str],
+        code_template: Callable[[str], str],
+        class_link: Callable[[str, str,str | None], str],
     ):
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
@@ -479,7 +479,7 @@ class ClassDoc(NamedEntityDoc):
     namespace: "NamespaceDoc"
 
     @classmethod
-    def parse(cls, class_scope: ClassScope, namespace: "NamespaceDoc") -> typing.Optional["ClassDoc"]:
+    def parse(cls, class_scope: ClassScope, namespace: "NamespaceDoc") -> "ClassDoc | None":
         kwargs, commands_and_data = super()._from_comment(class_scope.class_decl.doxygen)
 
         name_segment = class_scope.class_decl.typename.segments[-1]
@@ -531,8 +531,8 @@ class ClassDoc(NamedEntityDoc):
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
-        code_template: typing.Callable[[str], str],
-        class_link: typing.Callable[[str, str, typing.Optional[str]], str],
+        code_template: Callable[[str], str],
+        class_link: Callable[[str, str, str | None], str],
     ):
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
@@ -566,7 +566,7 @@ class NamespaceDoc(NamedEntityDoc):
     enums: dict[str, EnumDoc] = field(default_factory=dict)
 
     @classmethod
-    def parse(cls, namespace_scope: NamespaceScope) -> typing.Optional["NamespaceDoc"]:
+    def parse(cls, namespace_scope: NamespaceScope) -> "NamespaceDoc | None":
         kwargs, commands_and_data = super()._from_comment(namespace_scope.doxygen)
 
         if any(
@@ -581,8 +581,8 @@ class NamespaceDoc(NamedEntityDoc):
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
-        code_template: typing.Callable[[str], str],
-        class_link: typing.Callable[[str, str, typing.Optional[str]], str],
+        code_template: Callable[[str], str],
+        class_link: Callable[[str, str, str | None], str],
     ):
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
