@@ -9,11 +9,9 @@ from cxxheaderparser.simple import ClassScope, NamespaceScope
 from cxxheaderparser.types import AnonymousName, EnumDecl, Enumerator, Field, Method, Parameter
 
 
-def strip_line(line: str) -> str:
+def remove_comment_chars_from_line(line: str) -> str:
     line = line.strip()
-    if line.startswith("//!<"):
-        line = line[4:]
-    elif line.startswith("///<"):
+    if line.startswith("//!<") or line.startswith("///<"):
         line = line[4:]
     elif line.startswith("///"):
         line = line[3:]
@@ -58,7 +56,7 @@ def preprocess_lines(lines: list[str]) -> list[str]:
 
             continue
 
-        stripped_line = strip_line(line)
+        stripped_line = remove_comment_chars_from_line(line)
         fully_stripped_line = stripped_line.lstrip()
 
         if block_type == "other":
@@ -149,22 +147,25 @@ def process_lines(lines: list[str]) -> list[CommandDoc]:
 
         if not keyword:
             empty_command.doc.append(TextBlock(text=rest_of_line))
-        elif keyword == "blank":
-            if cur_command not in result:
-                result.append(cur_command)
-            cur_command = empty_command
-        elif keyword == "verbatim":
-            cur_command.doc.append(VerbatimBlock(text=rest_of_line))
-        elif keyword == "code":
-            cur_command.doc.append(CodeBlock(text=rest_of_line))
-        elif keyword == "li":
-            cur_command.doc.append(TextBlock(text=rest_of_line))
-        else:
-            if cur_command not in result:
-                result.append(cur_command)
-            cur_command = CommandDoc(name=keyword)
-            if rest_of_line:
+            continue
+
+        match keyword:
+            case "blank":
+                if cur_command not in result:
+                    result.append(cur_command)
+                cur_command = empty_command
+            case "verbatim":
+                cur_command.doc.append(VerbatimBlock(text=rest_of_line))
+            case "code":
+                cur_command.doc.append(CodeBlock(text=rest_of_line))
+            case "li":
                 cur_command.doc.append(TextBlock(text=rest_of_line))
+            case _:
+                if cur_command not in result:
+                    result.append(cur_command)
+                cur_command = CommandDoc(name=keyword)
+                if rest_of_line:
+                    cur_command.doc.append(TextBlock(text=rest_of_line))
 
     if cur_command not in result:
         result.append(cur_command)
@@ -460,7 +461,7 @@ class EnumDoc(NamedEntityDoc):
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
         code_template: Callable[[str], str],
-        class_link: Callable[[str, str,str | None], str],
+        class_link: Callable[[str, str, str | None], str],
     ):
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 

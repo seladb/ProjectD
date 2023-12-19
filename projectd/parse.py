@@ -1,8 +1,8 @@
 import os
 import re
-from typing import Callable
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import Callable
 
 from cxxheaderparser.options import ParserOptions
 from cxxheaderparser.preprocessor import make_pcpp_preprocessor
