@@ -2,12 +2,13 @@ import os
 import re
 from shutil import rmtree
 
-from config import TemplateType, get_config
 from jinja2 import Environment, FileSystemLoader
-from parse import parse, post_process
+
+from projectd.config import TemplateType, get_config
+from projectd.parse import parse, post_process
 
 
-def _delete_current_files(directory_path: str):
+def _delete_current_files(directory_path: str) -> None:
     for item in os.listdir(directory_path):
         item_path = os.path.join(directory_path, item)
 
@@ -18,11 +19,11 @@ def _delete_current_files(directory_path: str):
             rmtree(item_path)
 
 
-def _regex_replace(string, find, replace):
+def _regex_replace(string: str, find: str, replace: str):
     return re.sub(find, replace, string)
 
 
-def run():
+def run() -> None:
     config = get_config()
 
     template_loader = FileSystemLoader(searchpath=config.template_dir)

@@ -22,7 +22,7 @@ def remove_comment_chars_from_line(line: str) -> str:
 
 
 def preprocess_lines(lines: list[str]) -> list[str]:
-    result = []
+    result: list[str] = []
     cur_line = None
     block_type = None
 
@@ -146,7 +146,7 @@ def process_lines(lines: list[str]) -> list[CommandDoc]:
         keyword, rest_of_line = get_keyword_and_rest_of_line(line)
 
         if not keyword:
-            empty_command.doc.append(TextBlock(text=rest_of_line))
+            empty_command.doc.append(TextBlock(text=rest_of_line))  # type: ignore[arg-type]
             continue
 
         match keyword:
@@ -155,17 +155,17 @@ def process_lines(lines: list[str]) -> list[CommandDoc]:
                     result.append(cur_command)
                 cur_command = empty_command
             case "verbatim":
-                cur_command.doc.append(VerbatimBlock(text=rest_of_line))
+                cur_command.doc.append(VerbatimBlock(text=rest_of_line))  # type: ignore[arg-type]
             case "code":
-                cur_command.doc.append(CodeBlock(text=rest_of_line))
+                cur_command.doc.append(CodeBlock(text=rest_of_line))  # type: ignore[arg-type]
             case "li":
-                cur_command.doc.append(TextBlock(text=rest_of_line))
+                cur_command.doc.append(TextBlock(text=rest_of_line))  # type: ignore[arg-type]
             case _:
                 if cur_command not in result:
                     result.append(cur_command)
                 cur_command = CommandDoc(name=keyword)
                 if rest_of_line:
-                    cur_command.doc.append(TextBlock(text=rest_of_line))
+                    cur_command.doc.append(TextBlock(text=rest_of_line))  # type: ignore[arg-type]
 
     if cur_command not in result:
         result.append(cur_command)
@@ -295,7 +295,7 @@ class EntityDoc:
         cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str | None], str],
-    ):
+    ) -> None:
         if self.brief:
             self.brief = self._update_doc_block(self.brief, namespace_docs, cur_namespace, code_template, class_link)
         if self.desc:
@@ -306,7 +306,7 @@ class EntityDoc:
 class NamedEntityDoc(EntityDoc):
     name: str
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.name
 
 
@@ -400,7 +400,7 @@ class MethodDoc(NamedEntityDoc):
         cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str | None], str],
-    ):
+    ) -> None:
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
         for param in self.params:
@@ -420,7 +420,7 @@ class AttributeDoc(NamedEntityDoc):
     def parse(cls, field_scope: Field) -> "AttributeDoc":
         kwargs, _ = cls._from_comment(field_scope.doxygen)
 
-        return cls(name=field_scope.name, attribute_type=field_scope.type.format(), **kwargs)
+        return cls(name=field_scope.name or "Unknown", attribute_type=field_scope.type.format(), **kwargs)
 
 
 @dataclass
@@ -462,7 +462,7 @@ class EnumDoc(NamedEntityDoc):
         cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str | None], str],
-    ):
+    ) -> None:
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
         for val in self.values:
@@ -534,7 +534,7 @@ class ClassDoc(NamedEntityDoc):
         cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str | None], str],
-    ):
+    ) -> None:
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
         for public_method in self.public_methods:
@@ -584,7 +584,7 @@ class NamespaceDoc(NamedEntityDoc):
         cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str | None], str],
-    ):
+    ) -> None:
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
         for enum in self.enums.values():
