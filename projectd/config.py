@@ -34,4 +34,4 @@ def get_config() -> Config:
     with open("config.json") as config_file:
         config_json = json.load(config_file)
 
-    return from_dict(data_class=Config, data=config_json, config=DaciteConfig(cast=[TemplateType]))
+    return from_dict(data_class=Config, data=config_json, config=DaciteConfig(cast=[TemplateType]))  # type: ignore[no-any-return]

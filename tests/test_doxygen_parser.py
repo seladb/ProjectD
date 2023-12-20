@@ -1,6 +1,10 @@
 import pytest
 
-from projectd.doxygen_parser import get_keyword_and_rest_of_line, preprocess_lines, remove_comment_chars_from_line
+from projectd.doxygen_parser import (
+    get_keyword_and_rest_of_line,
+    preprocess_lines,
+    remove_comment_chars_from_line,
+)
 
 
 @pytest.mark.parametrize(
@@ -219,6 +223,23 @@ class TestPreprocessLineOtherBlocks:
 
         assert preprocess_lines(block) == expected
 
+    def test_empty_input(self) -> None:
+        assert preprocess_lines([""]) == []
+
+    def test_blank_line(self) -> None:
+        block = [
+            "@keyword1 line 1",
+            "",
+            "@keyword2 line 2",
+        ]
+
+        expected = [
+            "@keyword1 line 1",
+            "@blank",
+            "@keyword2 line 2",
+        ]
+        assert preprocess_lines(block) == expected
+
     def test_all_block_types(self) -> None:
         block = [
             "@keyword1 some text",
@@ -266,3 +287,24 @@ class TestGetKeywordAndRestOfLine:
     def test_multiple_escape_chars_in_line(self) -> None:
         line = "@keyword @some @text"
         assert get_keyword_and_rest_of_line(line) == ("keyword", "@some @text")
+
+
+# class TestProcessLines:
+#     @pytest.fixture(scope="class")
+#     def mock_preprocess_lines(self):
+#         with patch("projectd.doxygen_parser.preprocess_lines") as p:
+#             p.side_effect = lambda lines: lines
+#             yield
+#
+#     def test_multiple_blocks(self, mock_preprocess_lines):
+#         lines = [
+#             "@keyword1 some text",
+#             "@code\nint i = 1;",
+#             "@keyword2 some text",
+#             "@li - list item 1",
+#             "@li - list item 2",
+#             "@verbatim\nline 1\nline 2",
+#         ]
+#
+#         expected = process_lines(lines)
+#         print(expected)

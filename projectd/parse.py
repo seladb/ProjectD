@@ -8,7 +8,7 @@ from cxxheaderparser.options import ParserOptions
 from cxxheaderparser.preprocessor import make_pcpp_preprocessor
 from cxxheaderparser.simple import parse_file
 
-from projectd.doxygen_parser import ClassDoc, CodeBlock, EnumDoc, FileDoc, NamespaceDoc, TextBlock, VerbatimBlock
+from projectd.doxygen_parser import ClassDoc, EnumDoc, FileDoc, NamespaceDoc
 
 
 @dataclass
@@ -30,6 +30,8 @@ def get_base_classes(ns: NamespaceDoc, class_doc: ClassDoc) -> list[str]:
 
 
 def parse(directory_paths: list[str], defines: list[str] | None = None) -> ParsedDocData:
+    # ruff: noqa: C901
+
     if defines is None:
         defines = []
     preprocessor = make_pcpp_preprocessor(passthru_includes=re.compile(".+"), defines=defines)
@@ -97,23 +99,6 @@ def parse(directory_paths: list[str], defines: list[str] | None = None) -> Parse
     #     f.write(json.dumps(asdict(parsed_data), indent=2))
 
     return parsed_data
-
-
-def _update_desc(
-    desc: list[TextBlock],
-    parsed_data: ParsedDocData,
-    code_template: Callable[[str], str],
-    class_link: Callable[[str], str],
-) -> list[str]:
-    result = []
-    for line in desc:
-        if isinstance(line, (CodeBlock, VerbatimBlock)):
-            result.append(code_template(str(line)))
-        elif isinstance(line, TextBlock):
-            words = [class_link(word) if word in parsed_data.classes else word for word in str(line).split()]
-            result.append(" ".join(words))
-
-    return result
 
 
 def post_process(

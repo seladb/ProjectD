@@ -19,7 +19,7 @@ def _delete_current_files(directory_path: str) -> None:
             rmtree(item_path)
 
 
-def _regex_replace(string: str, find: str, replace: str):
+def _regex_replace(string: str, find: str, replace: str):  # type: ignore[no-untyped-def]
     return re.sub(find, replace, string)
 
 

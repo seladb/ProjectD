@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
-from typing import Any, Callable
+from typing import Any, Callable, Iterator, Literal
 
 from cxxheaderparser.simple import ClassScope, NamespaceScope
 from cxxheaderparser.types import AnonymousName, EnumDecl, Enumerator, Field, Method, Parameter
@@ -24,7 +24,7 @@ def remove_comment_chars_from_line(line: str) -> str:
 def preprocess_lines(lines: list[str]) -> list[str]:
     # ruff: noqa: C901
     result: list[str] = []
-    cur_line = None
+    cur_line = ""
     block_type = None
 
     chars_from_original_line = 0
@@ -41,7 +41,7 @@ def preprocess_lines(lines: list[str]) -> list[str]:
                     cur_line = "\n".join([cur_line, line_without_end_verbatim])
 
                 result.append(cur_line)
-                cur_line = None
+                cur_line = ""
             else:
                 verbatim_line = line[chars_from_original_line:]
                 cur_line = "\n".join([cur_line, verbatim_line]) if cur_line else verbatim_line
@@ -52,7 +52,7 @@ def preprocess_lines(lines: list[str]) -> list[str]:
             if "\\endcode" in line or "@endcode" in line:
                 block_type = None
                 result.append(cur_line)
-                cur_line = None
+                cur_line = ""
             else:
                 code_line = line[chars_from_original_line:]
                 cur_line = "\n".join([cur_line, code_line]) if cur_line else code_line
@@ -66,7 +66,7 @@ def preprocess_lines(lines: list[str]) -> list[str]:
             if not fully_stripped_line or fully_stripped_line.startswith(("\\", "@", "-", "+", "*")):
                 block_type = None
                 result.append(cur_line)
-                cur_line = None
+                cur_line = ""
             else:
                 cur_line = " ".join([cur_line, fully_stripped_line]) if cur_line else fully_stripped_line
                 continue
@@ -75,7 +75,7 @@ def preprocess_lines(lines: list[str]) -> list[str]:
             if not fully_stripped_line or fully_stripped_line.startswith(("\\", "@", "-", "+", "*")):
                 block_type = None
                 result.append(cur_line)
-                cur_line = None
+                cur_line = ""
             else:
                 cur_line = " ".join([cur_line, fully_stripped_line]) if cur_line else fully_stripped_line
                 continue
@@ -116,25 +116,26 @@ def get_keyword_and_rest_of_line(line: str) -> tuple[str, str]:
 
 
 @dataclass
-class TextBlock:
+class DocElement:
     text: str
+    element_type: Literal["text", "code", "verbatim"]
+
+    def __str__(self) -> str:
+        return self.text
 
 
-class CodeBlock(TextBlock):
-    pass
+@dataclass
+class DocBlock:
+    elements: list[DocElement] = field(default_factory=list)
 
-
-class VerbatimBlock(TextBlock):
-    pass
-
-
-DocBlock = list[TextBlock] | list[str]
+    def __iter__(self) -> Iterator:
+        return iter(self.elements)
 
 
 @dataclass
 class CommandDoc:
     name: str
-    doc: DocBlock = field(default_factory=list)
+    doc: DocBlock = field(default_factory=DocBlock)
 
 
 def process_lines(lines: list[str]) -> list[CommandDoc]:
@@ -148,8 +149,7 @@ def process_lines(lines: list[str]) -> list[CommandDoc]:
         keyword, rest_of_line = get_keyword_and_rest_of_line(line)
 
         if not keyword:
-            empty_command.doc.append(TextBlock(text=rest_of_line))  # type: ignore[arg-type]
-            continue
+            empty_command.doc.elements.append(DocElement(text=rest_of_line, element_type="text"))
 
         match keyword:
             case "blank":
@@ -157,17 +157,17 @@ def process_lines(lines: list[str]) -> list[CommandDoc]:
                     result.append(cur_command)
                 cur_command = empty_command
             case "verbatim":
-                cur_command.doc.append(VerbatimBlock(text=rest_of_line))  # type: ignore[arg-type]
+                cur_command.doc.elements.append(DocElement(text=rest_of_line, element_type="verbatim"))
             case "code":
-                cur_command.doc.append(CodeBlock(text=rest_of_line))  # type: ignore[arg-type]
+                cur_command.doc.elements.append(DocElement(text=rest_of_line, element_type="code"))
             case "li":
-                cur_command.doc.append(TextBlock(text=rest_of_line))  # type: ignore[arg-type]
+                cur_command.doc.elements.append(DocElement(text=rest_of_line, element_type="text"))
             case _:
                 if cur_command not in result:
                     result.append(cur_command)
                 cur_command = CommandDoc(name=keyword)
                 if rest_of_line:
-                    cur_command.doc.append(TextBlock(text=rest_of_line))  # type: ignore[arg-type]
+                    cur_command.doc.elements.append(DocElement(text=rest_of_line, element_type="text"))
 
     if cur_command not in result:
         result.append(cur_command)
@@ -232,9 +232,9 @@ class EntityDoc:
             if word in ["@ref", "\\ref"]:
                 continue
 
-            namespace = None
-            klass = None
-            method = None
+            namespace = ""
+            klass = ""
+            method = ""
 
             stripped_word = re.sub(r"^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$", "", word)
             split_word = re.split(r"::|#", stripped_word)
@@ -281,15 +281,18 @@ class EntityDoc:
         cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str | None], str],
-    ) -> list[str]:
-        result = []
-        for line in block:
-            if isinstance(line, (CodeBlock, VerbatimBlock)):
-                result.append(code_template(line.text))
-            elif isinstance(line, TextBlock):
-                result.append(self._update_text_block(line.text, namespace_docs, cur_namespace, class_link))
+    ) -> DocBlock:
+        doc_elements = []
+        for element in block.elements:
+            updated_text = ""
+            if element.element_type in ["code", "verbatim"]:
+                updated_text = code_template(element.text)
+            elif element.element_type == "text":
+                updated_text = self._update_text_block(element.text, namespace_docs, cur_namespace, class_link)
 
-        return result
+            doc_elements.append(DocElement(text=updated_text, element_type=element.element_type))
+
+        return DocBlock(elements=doc_elements)
 
     def post_process(
         self,
@@ -350,13 +353,15 @@ class MethodDoc(NamedEntityDoc):
         direction = Direction(direction_from_regex) if direction_from_regex else Direction.IN
 
         try:
-            param_name, param_desc = param_doc.doc[0].text.split(" ", 1)
+            param_name, param_desc = param_doc.doc.elements[0].text.split(" ", 1)
         except ValueError:
             return None
 
         if param := next((param for param in params if param.name == param_name), None):
-            param_desc = [TextBlock(text=param_desc)] + param_doc.doc[1:]
-            return Param(name=param_name, desc=param_desc, direction=direction, param_type=param.type.format())
+            param_desc_block = DocBlock(
+                elements=[DocElement(text=param_desc, element_type="text")] + param_doc.doc.elements[1:]
+            )
+            return Param(name=param_name, desc=param_desc_block, direction=direction, param_type=param.type.format())
 
         return None
 
@@ -448,11 +453,11 @@ class EnumDoc(NamedEntityDoc):
         enum_name = enum_decl.typename.segments[-1].format()
         for cmd in commands_and_data:
             if cmd.name == "enum" and cmd.doc:
-                enum_name_and_desc = cmd.doc[0].text.split(" ", 1)
+                enum_name_and_desc = cmd.doc.elements[0].text.split(" ", 1)
                 if enum_name_and_desc[0] != enum_name:
                     return None
-                if len(enum_name_and_desc) > 1:
-                    kwargs["desc"] = cmd.doc + kwargs["desc"]
+                if len(enum_name_and_desc) > 1 and isinstance(kwargs["desc"], DocBlock):
+                    kwargs["desc"] = DocBlock(elements=cmd.doc.elements + kwargs["desc"].elements)
 
         kwargs["name"] = enum_name
         kwargs["values"] = [EnumeratorDoc.parse(val) for val in enum_decl.values]
@@ -495,11 +500,12 @@ class ClassDoc(NamedEntityDoc):
 
         for cmd in commands_and_data:
             if cmd.name == "class" and cmd.doc:
-                class_name_and_desc = cmd.doc[0].text.split(" ", 1)
+                class_name_and_desc = cmd.doc.elements[0].text.split(" ", 1)
                 if class_name_and_desc[0] != class_name:
                     return None
                 if len(class_name_and_desc) > 1:
-                    kwargs["desc"] = [TextBlock(text=class_name_and_desc[1])] + cmd.doc[1:] + kwargs["desc"]
+                    elements = [DocElement(text=class_name_and_desc[1], element_type="text")] + cmd.doc.elements[1:]
+                    kwargs["desc"] = DocBlock(elements=elements)
 
         public_methods = []
         for method in class_scope.methods:
@@ -515,8 +521,7 @@ class ClassDoc(NamedEntityDoc):
 
         public_enums = {}
         for enum in class_scope.enums:
-            if enum.access == "public":
-                enum_doc = EnumDoc.parse(enum)
+            if enum.access == "public" and (enum_doc := EnumDoc.parse(enum)):
                 public_enums[enum_doc.name] = enum_doc
 
         kwargs["public_methods"] = public_methods
@@ -573,7 +578,8 @@ class NamespaceDoc(NamedEntityDoc):
         kwargs, commands_and_data = super()._from_comment(namespace_scope.doxygen)
 
         if any(
-            cmd.name == "namespace" and cmd.doc[0].text.split()[0] != namespace_scope.name for cmd in commands_and_data
+            cmd.name == "namespace" and cmd.doc.elements[0].text.split()[0] != namespace_scope.name
+            for cmd in commands_and_data
         ):
             return None
 
@@ -602,4 +608,4 @@ class FileDoc(NamedEntityDoc):
     @classmethod
     def parse(cls, file_path: str) -> "FileDoc":
         file_name = os.path.basename(file_path)
-        return cls(name=file_name, desc=[], brief=None, deprecated=None, todo=None)
+        return cls(name=file_name, desc=DocBlock(), brief=None, deprecated=None, todo=None)
