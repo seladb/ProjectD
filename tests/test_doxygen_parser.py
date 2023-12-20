@@ -1,8 +1,15 @@
+from typing import Any, Generator
+from unittest.mock import patch
+
 import pytest
 
 from projectd.doxygen_parser import (
+    CommandDoc,
+    DocBlock,
+    DocElement,
     get_keyword_and_rest_of_line,
     preprocess_lines,
+    process_lines,
     remove_comment_chars_from_line,
 )
 
@@ -265,6 +272,19 @@ class TestPreprocessLineOtherBlocks:
 
         assert preprocess_lines(block) == expected
 
+    def test_no_keyword(self) -> None:
+        block = [
+            "line 1",
+            "line 2",
+            "",
+            "line 3",
+            "line 4",
+        ]
+
+        expected = ["line 1 line 2", "@blank", "line 3 line 4"]
+
+        assert preprocess_lines(block) == expected
+
 
 class TestGetKeywordAndRestOfLine:
     @pytest.mark.parametrize("escape_char", ["@", "\\"])
@@ -289,22 +309,93 @@ class TestGetKeywordAndRestOfLine:
         assert get_keyword_and_rest_of_line(line) == ("keyword", "@some @text")
 
 
-# class TestProcessLines:
-#     @pytest.fixture(scope="class")
-#     def mock_preprocess_lines(self):
-#         with patch("projectd.doxygen_parser.preprocess_lines") as p:
-#             p.side_effect = lambda lines: lines
-#             yield
-#
-#     def test_multiple_blocks(self, mock_preprocess_lines):
-#         lines = [
-#             "@keyword1 some text",
-#             "@code\nint i = 1;",
-#             "@keyword2 some text",
-#             "@li - list item 1",
-#             "@li - list item 2",
-#             "@verbatim\nline 1\nline 2",
-#         ]
-#
-#         expected = process_lines(lines)
-#         print(expected)
+class TestProcessLines:
+    @pytest.fixture(scope="class")
+    def mock_preprocess_lines(self) -> Generator:
+        with patch("projectd.doxygen_parser.preprocess_lines") as p:
+            p.side_effect = lambda lines: lines
+            yield
+
+    def test_multiple_blocks(self, mock_preprocess_lines: Any) -> None:
+        preprocessed_lines = [
+            "@keyword1 some text",
+            "@code\nint i = 1;",
+            "@keyword2 some text",
+            "@li - list item 1",
+            "@li - list item 2",
+            "@verbatim\nline 1\nline 2",
+        ]
+
+        expected = [
+            CommandDoc(
+                name="keyword1",
+                doc=DocBlock(
+                    elements=[
+                        DocElement(element_type="text", text="some text"),
+                        DocElement(element_type="code", text="int i = 1;"),
+                    ]
+                ),
+            ),
+            CommandDoc(
+                name="keyword2",
+                doc=DocBlock(
+                    elements=[
+                        DocElement(element_type="text", text="some text"),
+                        DocElement(element_type="text", text="- list item 1"),
+                        DocElement(element_type="text", text="- list item 2"),
+                        DocElement(element_type="verbatim", text="line 1\nline 2"),
+                    ]
+                ),
+            ),
+        ]
+
+        assert process_lines(preprocessed_lines) == expected
+
+    def test_anonymous_command(self, mock_preprocess_lines: Any) -> None:
+        preprocessed_lines = [
+            "anonymous keyword text",
+            "@keyword1 some text",
+            "more anonymous keyword text",
+            "@code\nint i = 1;",
+            "@verbatim\nline 1\nline 2",
+        ]
+
+        expected = [
+            CommandDoc(
+                name="",
+                doc=DocBlock(
+                    elements=[
+                        DocElement(element_type="text", text="anonymous keyword text"),
+                        DocElement(element_type="text", text="more anonymous keyword text"),
+                        DocElement(element_type="code", text="int i = 1;"),
+                        DocElement(element_type="verbatim", text="line 1\nline 2"),
+                    ]
+                ),
+            ),
+            CommandDoc(name="keyword1", doc=DocBlock(elements=[DocElement(element_type="text", text="some text")])),
+        ]
+
+        assert process_lines(preprocessed_lines) == expected
+
+    def test_command_with_blank(self, mock_preprocess_lines: Any) -> None:
+        preprocessed_lines = [
+            "anonymous keyword text",
+            "@keyword1 some text",
+            "@blank",
+            "more anonymous keyword text",
+        ]
+
+        expected = [
+            CommandDoc(
+                name="",
+                doc=DocBlock(
+                    elements=[
+                        DocElement(element_type="text", text="anonymous keyword text"),
+                        DocElement(element_type="text", text="more anonymous keyword text"),
+                    ]
+                ),
+            ),
+            CommandDoc(name="keyword1", doc=DocBlock(elements=[DocElement(element_type="text", text="some text")])),
+        ]
+
+        assert process_lines(preprocessed_lines) == expected

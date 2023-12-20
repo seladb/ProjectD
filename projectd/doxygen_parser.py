@@ -141,21 +141,22 @@ class CommandDoc:
 def process_lines(lines: list[str]) -> list[CommandDoc]:
     lines = preprocess_lines(lines)
 
-    result = []
-    empty_command = CommandDoc(name="")
-    cur_command = empty_command
+    commands = []
+    anonymous_command = CommandDoc(name="")
+    cur_command = anonymous_command
 
     for line in lines:
-        keyword, rest_of_line = get_keyword_and_rest_of_line(line)
+        if cur_command not in commands:
+            commands.append(cur_command)
 
-        if not keyword:
-            empty_command.doc.elements.append(DocElement(text=rest_of_line, element_type="text"))
+        keyword, rest_of_line = get_keyword_and_rest_of_line(line)
 
         match keyword:
             case "blank":
-                if cur_command not in result:
-                    result.append(cur_command)
-                cur_command = empty_command
+                cur_command = anonymous_command
+            case "":
+                cur_command = anonymous_command
+                cur_command.doc.elements.append(DocElement(text=rest_of_line, element_type="text"))
             case "verbatim":
                 cur_command.doc.elements.append(DocElement(text=rest_of_line, element_type="verbatim"))
             case "code":
@@ -163,16 +164,14 @@ def process_lines(lines: list[str]) -> list[CommandDoc]:
             case "li":
                 cur_command.doc.elements.append(DocElement(text=rest_of_line, element_type="text"))
             case _:
-                if cur_command not in result:
-                    result.append(cur_command)
                 cur_command = CommandDoc(name=keyword)
                 if rest_of_line:
                     cur_command.doc.elements.append(DocElement(text=rest_of_line, element_type="text"))
 
-    if cur_command not in result:
-        result.append(cur_command)
+    if cur_command not in commands:
+        commands.append(cur_command)
 
-    return result
+    return [command for command in commands if command.doc.elements]
 
 
 class Direction(str, Enum):
@@ -266,7 +265,7 @@ class EntityDoc:
                 klass = split_word[1]
                 method = split_word[2]
 
-            if namespace is not None or klass is not None or method is not None:
+            if namespace or klass or method:
                 word_with_link = word.replace(stripped_word, class_link(namespace, klass, method))
                 words.append(word_with_link)
             else:
