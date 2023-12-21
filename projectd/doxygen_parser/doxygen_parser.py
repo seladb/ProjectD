@@ -28,13 +28,14 @@ class Param:
 
 @dataclass
 class EntityDoc:
+    name: str
     desc: DocBlock | None
     brief: DocBlock | None
     deprecated: DocBlock | None
     todo: DocBlock | None
 
     @classmethod
-    def _from_comment(cls, doxygen: str | None) -> tuple[dict[str, Any], list[CommandDoc]]:
+    def _from_doxygen_string(cls, doxygen: str | None) -> tuple[dict[str, Any], list[CommandDoc]]:
         commands_and_data: list[CommandDoc] = []
         if doxygen:
             commands_and_data = process_lines(doxygen.splitlines())
@@ -144,17 +145,12 @@ class EntityDoc:
         if self.desc:
             self.desc = self._update_doc_block(self.desc, namespace_docs, cur_namespace, code_template, class_link)
 
-
-@dataclass
-class NamedEntityDoc(EntityDoc):
-    name: str
-
     def __repr__(self) -> str:
         return self.name
 
 
 @dataclass
-class MethodDoc(NamedEntityDoc):
+class MethodDoc(EntityDoc):
     params: list[Param]
     static: bool
     inline: bool
@@ -205,7 +201,7 @@ class MethodDoc(NamedEntityDoc):
 
     @classmethod
     def parse(cls, method: Method) -> "MethodDoc | None":
-        kwargs, commands_and_data = super()._from_comment(method.doxygen)
+        kwargs, commands_and_data = super()._from_doxygen_string(method.doxygen)
         kwargs["name"] = method.name.format()
         params = []
 
@@ -258,35 +254,35 @@ class MethodDoc(NamedEntityDoc):
 
 
 @dataclass
-class AttributeDoc(NamedEntityDoc):
+class AttributeDoc(EntityDoc):
     attribute_type: str
 
     @classmethod
     def parse(cls, field_scope: Field) -> "AttributeDoc":
-        kwargs, _ = cls._from_comment(field_scope.doxygen)
+        kwargs, _ = cls._from_doxygen_string(field_scope.doxygen)
 
         return cls(name=field_scope.name or "Unknown", attribute_type=field_scope.type.format(), **kwargs)
 
 
 @dataclass
-class EnumeratorDoc(NamedEntityDoc):
+class EnumeratorDoc(EntityDoc):
     value: str | None
 
     @classmethod
     def parse(cls, enumerator: Enumerator) -> "EnumeratorDoc":
-        kwargs, _ = super()._from_comment(enumerator.doxygen)
+        kwargs, _ = super()._from_doxygen_string(enumerator.doxygen)
         kwargs["value"] = enumerator.value.format() if enumerator.value else None
         kwargs["name"] = enumerator.name
         return cls(**kwargs)
 
 
 @dataclass
-class EnumDoc(NamedEntityDoc):
+class EnumDoc(EntityDoc):
     values: list[EnumeratorDoc]
 
     @classmethod
     def parse(cls, enum_decl: EnumDecl) -> "EnumDoc | None":
-        kwargs, commands_and_data = super()._from_comment(enum_decl.doxygen)
+        kwargs, commands_and_data = super()._from_doxygen_string(enum_decl.doxygen)
 
         enum_name = enum_decl.typename.segments[-1].format()
         for cmd in commands_and_data:
@@ -315,7 +311,7 @@ class EnumDoc(NamedEntityDoc):
 
 
 @dataclass
-class ClassDoc(NamedEntityDoc):
+class ClassDoc(EntityDoc):
     class_key: str
     full_name: str
     public_methods: list[MethodDoc]
@@ -327,7 +323,7 @@ class ClassDoc(NamedEntityDoc):
     @classmethod
     def parse(cls, class_scope: ClassScope, namespace: "NamespaceDoc") -> "ClassDoc | None":
         # ruff: noqa: C901
-        kwargs, commands_and_data = super()._from_comment(class_scope.class_decl.doxygen)
+        kwargs, commands_and_data = super()._from_doxygen_string(class_scope.class_decl.doxygen)
 
         name_segment = class_scope.class_decl.typename.segments[-1]
         if isinstance(name_segment, AnonymousName):
@@ -408,13 +404,13 @@ class ClassDoc(NamedEntityDoc):
 
 
 @dataclass
-class NamespaceDoc(NamedEntityDoc):
+class NamespaceDoc(EntityDoc):
     classes: dict[str, ClassDoc] = field(default_factory=dict)
     enums: dict[str, EnumDoc] = field(default_factory=dict)
 
     @classmethod
     def parse(cls, namespace_scope: NamespaceScope) -> "NamespaceDoc | None":
-        kwargs, commands_and_data = super()._from_comment(namespace_scope.doxygen)
+        kwargs, commands_and_data = super()._from_doxygen_string(namespace_scope.doxygen)
 
         if any(
             cmd.name == "namespace" and cmd.doc.elements[0].text.split()[0] != namespace_scope.name
@@ -439,7 +435,7 @@ class NamespaceDoc(NamedEntityDoc):
 
 
 @dataclass
-class FileDoc(NamedEntityDoc):
+class FileDoc(EntityDoc):
     namespaces: dict[str, NamespaceDoc] = field(default_factory=dict)
     classes: dict[str, ClassDoc] = field(default_factory=dict)
     enums: dict[str, EnumDoc] = field(default_factory=dict)
