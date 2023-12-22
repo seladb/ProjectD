@@ -42,8 +42,8 @@ def run() -> None:
             parsed_data,
             lambda v: code_template.render(value=v),
             # ruff: noqa: B023
-            lambda namespace, klass, method: class_link_template.render(
-                namespace=namespace, klass=klass, method=method
+            lambda word, namespace, klass, method: class_link_template.render(
+                word=word, namespace=namespace, klass=klass, method=method
             ),
         )
 

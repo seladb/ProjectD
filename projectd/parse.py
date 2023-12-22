@@ -104,7 +104,7 @@ def parse(directory_paths: list[str], defines: list[str] | None = None) -> Parse
 def post_process(
     parsed_data: ParsedDocData,
     code_template: Callable[[str], str],
-    class_link: Callable[[str, str, str | None], str],
+    class_link: Callable[[str, str, str, str | None], str],
 ) -> ParsedDocData:
     post_processed_parsed_data = deepcopy(parsed_data)
     for ns in post_processed_parsed_data.namespaces.values():

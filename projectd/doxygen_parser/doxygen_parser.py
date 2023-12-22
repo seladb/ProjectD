@@ -10,6 +10,7 @@ from cxxheaderparser.types import AnonymousName, EnumDecl, Enumerator, Field, Me
 
 from projectd.doxygen_parser.dataclasses import CommandDoc, DocBlock, DocElement
 from projectd.doxygen_parser.process_lines import process_lines
+from projectd.doxygen_parser.utils import modify_sentence
 
 
 class Direction(str, Enum):
@@ -54,72 +55,57 @@ class EntityDoc:
             attr_or_method_name == public_attr.name for public_attr in class_doc.public_attributes
         )
 
-    @classmethod
+    def _find_reference(self, tokens: list[str], namespace_docs: dict[str, "NamespaceDoc"]) -> "EntityDoc | None":
+        namespace_name = tokens[0] if tokens else None
+
+        if namespace_name is None or namespace_name not in namespace_docs:
+            return None
+
+        namespace = namespace_docs[namespace_name]
+
+        return namespace.find_token_reference(tokens[1:])
+
     def _update_text_block(
-        cls,
-        text_block: str,
+        self,
+        text: str,
         namespace_docs: dict[str, "NamespaceDoc"],
-        cur_namespace: str,
-        class_link: Callable[[str, str, str | None], str],
+        class_link: Callable[[str, str, str, str | None], str],
     ) -> str:
-        # ruff: noqa: C901
-        text_block_str = str(text_block)
-        index_of_first_non_whitespace = len(text_block_str) - len(text_block_str.lstrip())
-        prefix = text_block_str[:index_of_first_non_whitespace]
-        words = []
-        for word in text_block_str.split():
+        def process_word(word: str) -> str:
             if word in ["@ref", "\\ref"]:
-                continue
+                return ""
 
-            namespace = ""
-            klass = ""
-            method = ""
+            if entity := self._find_reference(re.split(r"::|#", word), namespace_docs):
+                if isinstance(entity, ClassDoc):
+                    return class_link(word.replace("#", "::"), entity.namespace.name, entity.name, "")
+                if isinstance(entity, MethodDoc):
+                    if entity.class_doc:
+                        return class_link(
+                            word.replace("#", "::"), entity.class_doc.namespace.name, entity.class_doc.name, entity.name
+                        )
+                    return word
+                if isinstance(entity, AttributeDoc):
+                    if entity.class_doc:
+                        return class_link(
+                            word.replace("#", "::"), entity.class_doc.namespace.name, entity.class_doc.name, entity.name
+                        )
+                    return word
 
-            stripped_word = re.sub(r"^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$", "", word)
-            split_word = re.split(r"::|#", stripped_word)
-            if len(split_word) == 1:
-                if split_word[0] in namespace_docs:
-                    namespace = split_word[0]
-                elif split_word[0] in namespace_docs[cur_namespace].classes:
-                    namespace = cur_namespace
-                    klass = split_word[0]
-            elif len(split_word) == 2:
-                split_word[1] = split_word[1].replace("()", "")
-                if split_word[0] in namespace_docs and split_word[1] in namespace_docs[split_word[0]].classes:
-                    namespace = split_word[0]
-                    klass = split_word[1]
-                elif split_word[0] in namespace_docs[cur_namespace].classes and cls._is_public_attribute_or_method(
-                    namespace_docs[cur_namespace].classes[split_word[0]], split_word[1]
-                ):
-                    namespace = cur_namespace
-                    klass = split_word[0]
-                    method = split_word[1]
-            elif len(split_word) == 3 and (
-                split_word[0] in namespace_docs
-                and split_word[1] in namespace_docs[split_word[0]].classes
-                and cls._is_public_attribute_or_method(
-                    namespace_docs[split_word[0]].classes[split_word[1]], split_word[2]
-                )
-            ):
-                namespace = split_word[0]
-                klass = split_word[1]
-                method = split_word[2]
+                if isinstance(entity, NamespaceDoc):
+                    return class_link(word, entity.name, "", "")
+                if isinstance(entity, EnumDoc):
+                    return word
 
-            if namespace or klass or method:
-                word_with_link = word.replace(stripped_word, class_link(namespace, klass, method))
-                words.append(word_with_link)
-            else:
-                words.append(word)
+            return word
 
-        return prefix + " ".join(words)
+        return modify_sentence(text, process_word)
 
     def _update_doc_block(
         self,
         block: DocBlock,
         namespace_docs: dict[str, "NamespaceDoc"],
-        cur_namespace: str,
         code_template: Callable[[str], str],
-        class_link: Callable[[str, str, str | None], str],
+        class_link: Callable[[str, str, str, str | None], str],
     ) -> DocBlock:
         doc_elements = []
         for element in block.elements:
@@ -127,7 +113,7 @@ class EntityDoc:
             if element.element_type in ["code", "verbatim"]:
                 updated_text = code_template(element.text)
             elif element.element_type == "text":
-                updated_text = self._update_text_block(element.text, namespace_docs, cur_namespace, class_link)
+                updated_text = self._update_text_block(element.text, namespace_docs, class_link)
 
             doc_elements.append(DocElement(text=updated_text, element_type=element.element_type))
 
@@ -138,12 +124,12 @@ class EntityDoc:
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
         code_template: Callable[[str], str],
-        class_link: Callable[[str, str, str | None], str],
+        class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
         if self.brief:
-            self.brief = self._update_doc_block(self.brief, namespace_docs, cur_namespace, code_template, class_link)
+            self.brief = self._update_doc_block(self.brief, namespace_docs, code_template, class_link)
         if self.desc:
-            self.desc = self._update_doc_block(self.desc, namespace_docs, cur_namespace, code_template, class_link)
+            self.desc = self._update_doc_block(self.desc, namespace_docs, code_template, class_link)
 
     def __repr__(self) -> str:
         return self.name
@@ -167,6 +153,22 @@ class MethodDoc(EntityDoc):
     override: bool
     returns: DocBlock | None = None
     return_type: str | None = None
+    class_doc: "ClassDoc | None" = None
+
+    def _find_reference(self, tokens: list[str], namespace_docs: dict[str, "NamespaceDoc"]) -> EntityDoc | None:
+        if entity := super()._find_reference(tokens, namespace_docs):
+            return entity
+
+        if not self.class_doc:
+            return None
+
+        if entity := self.class_doc.find_token_reference(tokens):
+            return entity
+
+        if entity := self.class_doc.namespace.find_token_reference(tokens):
+            return entity
+
+        return None
 
     @classmethod
     def parse_param(cls, param_doc: CommandDoc, params: list[Parameter]) -> Param | None:
@@ -240,22 +242,21 @@ class MethodDoc(EntityDoc):
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
         code_template: Callable[[str], str],
-        class_link: Callable[[str, str, str | None], str],
+        class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
         for param in self.params:
-            param.desc = self._update_doc_block(param.desc, namespace_docs, cur_namespace, code_template, class_link)
+            param.desc = self._update_doc_block(param.desc, namespace_docs, code_template, class_link)
 
         if self.returns:
-            self.returns = self._update_doc_block(
-                self.returns, namespace_docs, cur_namespace, code_template, class_link
-            )
+            self.returns = self._update_doc_block(self.returns, namespace_docs, code_template, class_link)
 
 
 @dataclass
 class AttributeDoc(EntityDoc):
     attribute_type: str
+    class_doc: "ClassDoc | None" = None
 
     @classmethod
     def parse(cls, field_scope: Field) -> "AttributeDoc":
@@ -302,7 +303,7 @@ class EnumDoc(EntityDoc):
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
         code_template: Callable[[str], str],
-        class_link: Callable[[str, str, str | None], str],
+        class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
@@ -319,6 +320,29 @@ class ClassDoc(EntityDoc):
     public_enums: dict[str, EnumDoc]
     base_classes: list[str]
     namespace: "NamespaceDoc"
+
+    def _find_reference(self, tokens: list[str], namespace_docs: dict[str, "NamespaceDoc"]) -> EntityDoc | None:
+        if entity := super()._find_reference(tokens, namespace_docs):
+            return entity
+
+        if entity := self.namespace.find_token_reference(tokens):
+            return entity
+
+        next_token = tokens[0] if tokens else None
+
+        if next_token is None:
+            return None
+
+        if next_token.endswith("()") and (
+            method := next((m for m in self.public_methods if m.name == next_token.rstrip("()")), None)
+        ):
+            return method
+        elif attribute := next((attr for attr in self.public_attributes if attr.name == next_token), None):
+            return attribute
+        elif next_token in self.public_enums:
+            return self.public_enums[next_token]
+
+        return None
 
     @classmethod
     def parse(cls, class_scope: ClassScope, namespace: "NamespaceDoc") -> "ClassDoc | None":
@@ -368,14 +392,37 @@ class ClassDoc(EntityDoc):
         ]
         kwargs["namespace"] = namespace
 
-        return cls(**kwargs)
+        instance = cls(**kwargs)
+        for method in instance.public_methods:
+            method.class_doc = instance
+        for attr in instance.public_attributes:
+            attr.class_doc = instance
+
+        return instance
+
+    def find_token_reference(self, tokens: list[str]) -> EntityDoc | None:
+        next_token = tokens[0] if tokens else None
+
+        if next_token is None:
+            return self
+
+        if next_token.endswith("()") and (
+            method := next((m for m in self.public_methods if m.name == next_token.rstrip("()")), None)
+        ):
+            return method
+        elif attribute := next((attr for attr in self.public_attributes if attr.name == next_token), None):
+            return attribute
+        elif next_token in self.public_enums:
+            return self.public_enums[next_token]
+
+        return None
 
     def post_process(
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
         code_template: Callable[[str], str],
-        class_link: Callable[[str, str, str | None], str],
+        class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
@@ -408,6 +455,23 @@ class NamespaceDoc(EntityDoc):
     classes: dict[str, ClassDoc] = field(default_factory=dict)
     enums: dict[str, EnumDoc] = field(default_factory=dict)
 
+    def _find_reference(self, tokens: list[str], namespace_docs: dict[str, "NamespaceDoc"]) -> EntityDoc | None:
+        if entity := super()._find_reference(tokens, namespace_docs):
+            return entity
+
+        next_token = tokens[0] if tokens else None
+
+        if next_token is None:
+            return None
+
+        if next_token in self.classes:
+            return self.classes[next_token].find_token_reference(tokens[1:])
+
+        if next_token in self.enums:
+            return self.enums[next_token]
+
+        return None
+
     @classmethod
     def parse(cls, namespace_scope: NamespaceScope) -> "NamespaceDoc | None":
         kwargs, commands_and_data = super()._from_doxygen_string(namespace_scope.doxygen)
@@ -421,12 +485,25 @@ class NamespaceDoc(EntityDoc):
         kwargs["name"] = namespace_scope.name
         return cls(**kwargs)
 
+    def find_token_reference(self, tokens: list[str]) -> EntityDoc | None:
+        next_token = tokens[0] if tokens else None
+
+        if next_token is None:
+            return self
+
+        if next_token in self.classes:
+            return self.classes[next_token].find_token_reference(tokens[1:])
+        elif next_token in self.enums:
+            return self.enums[next_token]
+
+        return None
+
     def post_process(
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
         cur_namespace: str,
         code_template: Callable[[str], str],
-        class_link: Callable[[str, str, str | None], str],
+        class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
         super().post_process(namespace_docs, cur_namespace, code_template, class_link)
 
