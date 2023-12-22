@@ -142,4 +142,4 @@ def process_lines(lines: list[str]) -> list[CommandDoc]:
     if cur_command not in commands:
         commands.append(cur_command)
 
-    return [command for command in commands if command.doc.elements]
+    return [command for command in commands if command.name or command.doc.elements]

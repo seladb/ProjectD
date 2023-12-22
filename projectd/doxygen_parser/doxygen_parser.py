@@ -49,12 +49,6 @@ class EntityDoc:
         }
         return kwargs, commands_and_data
 
-    @classmethod
-    def _is_public_attribute_or_method(cls, class_doc: "ClassDoc", attr_or_method_name: str) -> bool:
-        return any(attr_or_method_name == public_method.name for public_method in class_doc.public_methods) or any(
-            attr_or_method_name == public_attr.name for public_attr in class_doc.public_attributes
-        )
-
     def _find_reference(self, tokens: list[str], namespace_docs: dict[str, "NamespaceDoc"]) -> "EntityDoc | None":
         namespace_name = tokens[0] if tokens else None
 
@@ -476,11 +470,24 @@ class NamespaceDoc(EntityDoc):
     def parse(cls, namespace_scope: NamespaceScope) -> "NamespaceDoc | None":
         kwargs, commands_and_data = super()._from_doxygen_string(namespace_scope.doxygen)
 
-        if any(
-            cmd.name == "namespace" and cmd.doc.elements[0].text.split()[0] != namespace_scope.name
-            for cmd in commands_and_data
-        ):
-            return None
+        if namespace_command := next((cmd for cmd in commands_and_data if cmd.name == "namespace"), None):
+            # empty @namespace keyword
+            if not namespace_command.doc.elements:
+                return None
+
+            namespace_name_and_desc = namespace_command.doc.elements[0].text.split(" ", 1)
+
+            # namespace name doesn't match
+            if namespace_name_and_desc[0] != namespace_scope.name:
+                return None
+
+            # append rest of text to desc
+            if len(namespace_name_and_desc) > 1:
+                new_element = DocElement(text=namespace_name_and_desc[1], element_type="text")
+                if "desc" in kwargs and kwargs["desc"]:
+                    kwargs["desc"].elements.insert(0, new_element)
+                else:
+                    kwargs["desc"] = DocBlock(elements=[new_element])
 
         kwargs["name"] = namespace_scope.name
         return cls(**kwargs)

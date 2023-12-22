@@ -2,7 +2,7 @@ from projectd.doxygen_parser.dataclasses import CommandDoc, DocBlock, DocElement
 from projectd.doxygen_parser.doxygen_parser import EntityDoc
 
 
-class TestEntityDoc:
+class TestEntityDocParse:
     def test_parse_all_attributes(self) -> None:
         doxygen_string = """
         /**
