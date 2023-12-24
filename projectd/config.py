@@ -27,6 +27,7 @@ class Config:
     defines: list[str]
     template_dir: str
     code_template: str
+    auto_escape: bool
     templates: list[TemplateConfig]
 
 

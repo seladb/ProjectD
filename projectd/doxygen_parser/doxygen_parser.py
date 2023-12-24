@@ -116,7 +116,6 @@ class EntityDoc:
     def post_process(
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
-        cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
@@ -234,11 +233,10 @@ class MethodDoc(EntityDoc):
     def post_process(
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
-        cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
-        super().post_process(namespace_docs, cur_namespace, code_template, class_link)
+        super().post_process(namespace_docs, code_template, class_link)
 
         for param in self.params:
             param.desc = self._update_doc_block(param.desc, namespace_docs, code_template, class_link)
@@ -295,14 +293,13 @@ class EnumDoc(EntityDoc):
     def post_process(
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
-        cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
-        super().post_process(namespace_docs, cur_namespace, code_template, class_link)
+        super().post_process(namespace_docs, code_template, class_link)
 
         for val in self.values:
-            val.post_process(namespace_docs, cur_namespace, code_template, class_link)
+            val.post_process(namespace_docs, code_template, class_link)
 
 
 @dataclass
@@ -414,20 +411,19 @@ class ClassDoc(EntityDoc):
     def post_process(
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
-        cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
-        super().post_process(namespace_docs, cur_namespace, code_template, class_link)
+        super().post_process(namespace_docs, code_template, class_link)
 
         for public_method in self.public_methods:
-            public_method.post_process(namespace_docs, cur_namespace, code_template, class_link)
+            public_method.post_process(namespace_docs, code_template, class_link)
 
         for public_attr in self.public_attributes:
-            public_attr.post_process(namespace_docs, cur_namespace, code_template, class_link)
+            public_attr.post_process(namespace_docs, code_template, class_link)
 
         for public_enum in self.public_enums.values():
-            public_enum.post_process(namespace_docs, cur_namespace, code_template, class_link)
+            public_enum.post_process(namespace_docs, code_template, class_link)
 
     @cached_property
     def inheritance_tree(self) -> list["ClassDoc"]:
@@ -508,14 +504,13 @@ class NamespaceDoc(EntityDoc):
     def post_process(
         self,
         namespace_docs: dict[str, "NamespaceDoc"],
-        cur_namespace: str,
         code_template: Callable[[str], str],
         class_link: Callable[[str, str, str, str | None], str],
     ) -> None:
-        super().post_process(namespace_docs, cur_namespace, code_template, class_link)
+        super().post_process(namespace_docs, code_template, class_link)
 
         for enum in self.enums.values():
-            enum.post_process(namespace_docs, cur_namespace, code_template, class_link)
+            enum.post_process(namespace_docs, code_template, class_link)
 
 
 @dataclass
@@ -525,6 +520,58 @@ class FileDoc(EntityDoc):
     enums: dict[str, EnumDoc] = field(default_factory=dict)
 
     @classmethod
-    def parse(cls, file_path: str) -> "FileDoc":
-        file_name = os.path.basename(file_path)
-        return cls(name=file_name, desc=DocBlock(), brief=None, deprecated=None, todo=None)
+    def _get_doxygen_string(cls, file_path: str) -> str | None:
+        cur_comment_block = []
+        cur_comment_block_type = None
+        is_file_comment_block = False
+
+        with open(file_path) as f:
+            for line in f:
+                stripped_line = line.lstrip()
+                if stripped_line.startswith(("/*", "/*")):
+                    cur_comment_block = [line]
+                    cur_comment_block_type = "multi"
+                elif stripped_line.startswith("//"):
+                    cur_comment_block = [line]
+                    cur_comment_block_type = "single"
+
+                if not cur_comment_block:
+                    continue
+
+                if cur_comment_block[-1] != line:
+                    cur_comment_block.append(line)
+
+                if "@file" in line or "\\file" in line:
+                    is_file_comment_block = True
+
+                if (
+                    cur_comment_block_type == "multi"
+                    and (stripped_line.endswith("*/") or stripped_line.startswith("*/"))
+                ) or (cur_comment_block_type == "single" and not stripped_line.startswith("//")):
+                    if is_file_comment_block:
+                        return "".join(cur_comment_block)
+                    else:
+                        cur_comment_block = []
+                        is_file_comment_block = False
+
+        return None
+
+    @classmethod
+    def parse(cls, file_path: str) -> "FileDoc | None":
+        doxygen_string = cls._get_doxygen_string(file_path)
+        if not doxygen_string:
+            return None
+
+        kwargs, commands_and_data = super()._from_doxygen_string(doxygen_string)
+        kwargs["name"] = os.path.basename(file_path)
+
+        # cannot be None
+        file_command = next(cmd for cmd in commands_and_data if cmd.name == "file")
+
+        if file_command.doc.elements:
+            if "desc" in kwargs and kwargs["desc"]:
+                kwargs["desc"].elements = file_command.doc.elements + kwargs["desc"].elements
+            else:
+                kwargs["desc"] = DocBlock(elements=file_command.doc.elements)
+
+        return cls(**kwargs)

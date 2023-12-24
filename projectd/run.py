@@ -27,7 +27,9 @@ def run() -> None:
     config = get_config()
 
     template_loader = FileSystemLoader(searchpath=config.template_dir)
-    env = Environment(loader=template_loader, trim_blocks=True, lstrip_blocks=True, autoescape=True)
+    env = Environment(
+        loader=template_loader, trim_blocks=True, lstrip_blocks=True, autoescape=config.auto_escape  # noqa: S701
+    )
     env.filters["regex_replace"] = _regex_replace
 
     parsed_data = parse(config.input_dirs, config.defines)
@@ -62,6 +64,8 @@ def run() -> None:
                 file_path = os.path.join(
                     config.output_dir, template_config.output_file.replace("{file_name}", file.name)
                 )
+                if "SSLLayer.h" in file_path:
+                    print(file_path)
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 with open(file_path, "w") as f:
                     f.write(template.render(file=file))

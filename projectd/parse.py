@@ -87,12 +87,12 @@ def parse(directory_paths: list[str], defines: list[str] | None = None) -> Parse
                         enums[enum_doc.name] = enum_doc
                         file_enums[enum_doc.name] = enum_doc
 
-            file_doc = FileDoc.parse(file_path)
-            file_doc.namespaces = file_namespaces
-            file_doc.classes = file_classes
-            file_doc.enums = file_enums
+            if file_doc := FileDoc.parse(file_path):
+                file_doc.namespaces = file_namespaces
+                file_doc.classes = file_classes
+                file_doc.enums = file_enums
 
-            files[file_path] = file_doc
+                files[file_path] = file_doc
 
     parsed_data = ParsedDocData(namespaces=namespaces, classes=classes, enums=enums, files=files)
     # with open("parsed_data.json", "w") as f:
@@ -108,8 +108,10 @@ def post_process(
 ) -> ParsedDocData:
     post_processed_parsed_data = deepcopy(parsed_data)
     for ns in post_processed_parsed_data.namespaces.values():
-        ns.post_process(parsed_data.namespaces, ns.name, code_template, class_link)
+        ns.post_process(parsed_data.namespaces, code_template, class_link)
     for cls in post_processed_parsed_data.classes.values():
-        cls.post_process(parsed_data.namespaces, cls.namespace.name, code_template, class_link)
+        cls.post_process(parsed_data.namespaces, code_template, class_link)
+    for file_doc in post_processed_parsed_data.files.values():
+        file_doc.post_process(parsed_data.namespaces, code_template, class_link)
 
     return post_processed_parsed_data
